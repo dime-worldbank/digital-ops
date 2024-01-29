@@ -16,6 +16,21 @@ from sklearn.feature_selection import SelectFromModel
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC ## Reading the labeled dataset
+# MAGIC
+# MAGIC From Clement:
+# MAGIC > - For example, one could consider that the list of all Digital Development GP could be a good place to start to define “digital projects”. This is the narrowest definition we have.
+# MAGIC > - Alternatively, we have used a keywords-based approach to identify digital projects (the so-called “digital tag”). This is the broadest definition.
+# MAGIC > - In the middle, we have a manually collected dataset based on the Digital Economy for Africa initiative (the “DE4A tag”). This is the most accurate but it was collected only for five GPs between FY 2018 and 2023.
+# MAGIC
+# MAGIC Notes from exploratory analysis: 
+# MAGIC - Use DE4A as the ground truth since it is the most accurate of the 3 options.
+# MAGIC - The DE4A tag does not seem to be geographically limited to Africa.
+# MAGIC - The biggest problem with this labeled dataset is that the non-digital (0) class may contain digital projects. These are false negatives in the labeled dataset we are using as ground truth. Given the "garbage in, garbage out" principle, it might be worth going through all projects between 2018 and 2023 and manually review and correct the "DE4A tag" = 0 projects.
+
+# COMMAND ----------
+
 df_raw = pd.read_excel('/dbfs/mnt/DAP/data/DigitalDevelopmentOperations/Documents/FY14 lending investments PDF URLs - DD Lead GP, DE4A, and Digital Tags.xlsx')
 df_raw['name_objective_abstract'] = df_raw['Project Name'].fillna('') + ' ' \
     + df_raw['Development Objective Description'].fillna('') + ' ' \
@@ -26,7 +41,8 @@ df
 
 # COMMAND ----------
 
-df.groupby('DE4A Manual').count()['Project Id']
+by_de4a = df.groupby('DE4A Manual').count()['Project Id']
+display(by_de4a)
 
 # COMMAND ----------
 
@@ -46,9 +62,6 @@ df[(df['DD Lead GP'] != df['DE4A Manual'])]
 vectorizer = TfidfVectorizer(max_features=1000, stop_words='english')
 classifier = LogisticRegression(solver="liblinear", class_weight='balanced', C=0.001, random_state=42)
 model = make_pipeline(vectorizer, classifier)
-
-# Preprocessing: Shuffling the data & split train test
-df = shuffle(df, random_state=42)
 
 X = df['name_objective_abstract']
 y = df['DE4A Manual']
@@ -95,6 +108,12 @@ grid_search.fit(X_train, y_train)
 # Print the best parameters & accuracy score
 print("Best Parameters:", grid_search.best_params_)
 print("Best Balanced Accuracy:", grid_search.best_score_)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Adding more text preprocessing
+# MAGIC See if it improves accuracy
 
 # COMMAND ----------
 
@@ -183,5 +202,10 @@ print("Test Balanced Accuracy: {:.2f}".format(test_balanced_accuracy),
 
 # COMMAND ----------
 
-# TODO: try Doc2Vec: split test & train. For train, each doc has its own label, build model. Then for each train doc, run the model and rank it against all other documents, check if we can grap top n or do say 2 out of top 3 most similar have digital flagged 1 then predict digital, check accuracy to determine n (& rules). Run on test set.
-# https://radimrehurek.com/gensim/auto_examples/tutorials/run_doc2vec_lee.html#sphx-glr-auto-examples-tutorials-run-doc2vec-lee-py
+from pathlib import Path
+import joblib
+
+MODEL_DIR = '/dbfs/mnt/DAP/data/DigitalDevelopmentOperations/models'
+Path(MODEL_DIR).mkdir(parents=True, exist_ok=True)
+
+joblib.dump(model, f'{MODEL_DIR}/tfidf_logit.pkl', compress = 1)
