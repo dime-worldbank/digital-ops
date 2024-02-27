@@ -32,7 +32,7 @@ df_raw = pd.read_excel('/Volumes/prd_dap/volumes/dap/data/DigitalDevelopmentOper
 df_raw['name_objective_abstract'] = df_raw['Project Name'].fillna('') + ' ' \
     + df_raw['Development Objective Description'].fillna('') + ' ' \
     + df_raw['ABSTRACT_TEXT'].fillna('')
-df = df[(df.FY >= 2018) & (df.FY <= 2023)] # before 2018 there is no "DE4A Manuel" = 0, after 2023 there are DD Lead GP = 1 while DE4A Manual = 0: df[(df['DD Lead GP'] != df['DE4A Manual']) & (df['DD Lead GP'] == 1)]
+df = df_raw[(df_raw.FY >= 2018) & (df_raw.FY <= 2023)] # before 2018 there is no "DE4A Manuel" = 0, after 2023 there are DD Lead GP = 1 while DE4A Manual = 0: df[(df['DD Lead GP'] != df['DE4A Manual']) & (df['DD Lead GP'] == 1)]
 df
 
 # COMMAND ----------
