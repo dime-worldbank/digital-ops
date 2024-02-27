@@ -51,43 +51,6 @@ balanced_accuracy_score(df['DE4A Manual'], df['Digital Tag'])
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Text preprocessing
-
-# COMMAND ----------
-
-from sklearn.base import BaseEstimator, TransformerMixin
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
-from nltk.stem import SnowballStemmer
-import nltk
-nltk.download('punkt')
-
-class TextPreprocessor(BaseEstimator, TransformerMixin):
-    def __init__(self, stemming=False):
-        self.stemming = stemming
-        self.ps = SnowballStemmer("english")
-
-    def fit(self, X, y=None):
-        return self
-
-    def transform(self, X):
-        preprocessed_text = X.apply(self._preprocess_text)
-        return preprocessed_text
-
-    def _preprocess_text(self, text):
-        text = text.lower()
-        words = word_tokenize(text)
-        # Handling punctuation
-        words = [word for word in words if word.isalnum()]
-        if self.stemming:
-            words = [self.ps.stem(word) for word in words]
-        return ' '.join(words)
-
-preprocessor = TextPreprocessor(stemming=True)
-
-# COMMAND ----------
-
-# MAGIC %md
 # MAGIC ## Model specification & training
 
 # COMMAND ----------
@@ -96,7 +59,7 @@ preprocessor = TextPreprocessor(stemming=True)
 vectorizer = TfidfVectorizer(max_features=1000, stop_words='english')
 classifier = LogisticRegression(solver="liblinear", class_weight='balanced', C=0.001, random_state=42)
 # classifier = MultinomialNB(alpha=0.1)
-model = make_pipeline(preprocessor, vectorizer, classifier)
+model = make_pipeline(vectorizer, classifier)
 
 X = df['name_objective_abstract']
 y = df['DE4A Manual']
@@ -111,7 +74,8 @@ balanced_accuracy = make_scorer(balanced_accuracy_score)
 recall = make_scorer(recall_score)
 cv_scores_accuracy = cross_val_score(model, X_train, y_train, cv=8, scoring=balanced_accuracy)
 cv_scores_recall = cross_val_score(model, X_train, y_train, cv=8, scoring=recall)
-print("Cross-validated Balanced Accuracy: {:.2f}".format(cv_scores_accuracy.mean()),
+mean_cv_accuracy = cv_scores_accuracy.mean()
+print("Cross-validated Balanced Accuracy: {:.2f}".format(mean_cv_accuracy),
       "Sensitivity: {:.2f}".format(cv_scores_recall.mean()))
 
 # Train the model on the full training set, predict then evaluate
@@ -125,24 +89,29 @@ print("Test Balanced Accuracy: {:.2f}".format(test_balanced_accuracy),
 
 # COMMAND ----------
 
-from sklearn.model_selection import GridSearchCV
+assert mean_cv_accuracy > 0.85, f"Expect {mean_cv_accuracy} to be over 85%, but got {mean_cv_accuracy}"
 
-# Define the parameter grid
-param_grid = {
-    # 'tfidfvectorizer__max_features': [500, 1000],
-    'tfidfvectorizer__ngram_range': [(1, 1), (1, 2)],
-    # 'logisticregression__penalty': ['l1', 'l2'],
-    'logisticregression__C': [0.001, 0.01, 0.1, 1.0],
-    # 'multinomialnb__alpha': [0.1, 0.5, 1.0],
-}
-grid_search = GridSearchCV(model, param_grid, cv=8, scoring=balanced_accuracy)
+# COMMAND ----------
 
-# Fit the grid search to the data
-grid_search.fit(X_train, y_train)
+# Omitting hyper param tuning for faster traning pipeline
+# from sklearn.model_selection import GridSearchCV
 
-# Print the best parameters & accuracy score
-print("Best Parameters:", grid_search.best_params_)
-print("Best Balanced Accuracy:", grid_search.best_score_)
+# # Define the parameter grid
+# param_grid = {
+#     # 'tfidfvectorizer__max_features': [500, 1000],
+#     'tfidfvectorizer__ngram_range': [(1, 1), (1, 2)],
+#     # 'logisticregression__penalty': ['l1', 'l2'],
+#     'logisticregression__C': [0.001, 0.01, 0.1, 1.0],
+#     # 'multinomialnb__alpha': [0.1, 0.5, 1.0],
+# }
+# grid_search = GridSearchCV(model, param_grid, cv=8, scoring=balanced_accuracy)
+
+# # Fit the grid search to the data
+# grid_search.fit(X_train, y_train)
+
+# # Print the best parameters & accuracy score
+# print("Best Parameters:", grid_search.best_params_)
+# print("Best Balanced Accuracy:", grid_search.best_score_)
 
 # COMMAND ----------
 
