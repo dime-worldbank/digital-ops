@@ -23,12 +23,28 @@ import gensim
 
 # COMMAND ----------
 
-df_raw = pd.read_excel('/dbfs/mnt/DAP/data/DigitalDevelopmentOperations/Documents/FY14 lending investments PDF URLs - DD Lead GP, DE4A, and Digital Tags.xlsx')
+df_raw = pd.read_excel('/Volumes/prd_dap/volumes/dap/data/DigitalDevelopmentOperations/Documents/FY14 lending investments PDF URLs - DD Lead GP, DE4A, and Digital Tags.xlsx')
 df_raw['name_objective_abstract'] = df_raw['Project Name'].fillna('') + ' ' \
     + df_raw['Development Objective Description'].fillna('') + ' ' \
     + df_raw['ABSTRACT_TEXT'].fillna('')
-df = df_raw.dropna(subset=['ABSTRACT_TEXT'])
-df = df[(df.FY >= 2018) & (df.FY <= 2023)] # before 2018 there is no "DE4A Manuel" = 0, after 2023 there are DD Lead GP = 1 while DE4A Manual = 0: df[(df['DD Lead GP'] != df['DE4A Manual']) & (df['DD Lead GP'] == 1)]
+df_cleaned = df_raw.dropna(subset=['ABSTRACT_TEXT'])
+df_cleaned = df_cleaned[(df_cleaned.FY >= 2018) & (df_cleaned.FY <= 2023)] # before 2018 there is no "DE4A Manuel" = 0, after 2023 there are DD Lead GP = 1 while DE4A Manual = 0: df[(df['DD Lead GP'] != df['DE4A Manual']) & (df['DD Lead GP'] == 1)]
+df_cleaned
+
+# COMMAND ----------
+
+projects_sdf_with_gp = spark.sql("""
+    SELECT proj_id, lead_gp_name
+    FROM prd_corpdata.dm_reference_gold.dim_project
+""")
+projects_with_gp = projects_sdf_with_gp.toPandas()
+projects_with_gp
+
+# COMMAND ----------
+
+df_merged = pd.merge(df_cleaned, projects_with_gp, left_on='Project Id', right_on='proj_id', how='left')
+df = df_merged[df_merged.lead_gp_name.isin(['Digital Development', 'Education', 'Finance, Competitiveness and Innovation', 'Governance', 'Social Protection & Jobs'])]
+df = df.drop(columns=['proj_id'])
 df
 
 # COMMAND ----------
@@ -36,7 +52,6 @@ df
 df['tokenized_text'] = df['name_objective_abstract'].apply(gensim.utils.simple_preprocess)
 
 # Split data into train and test sets
-df = shuffle(df, random_state=42)
 train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
 
 # only training set needs tagged documents with unique identifiers
@@ -44,7 +59,7 @@ train_tagged = [TaggedDocument(words=row['tokenized_text'], tags=[index]) for in
 test_untagged = test_df.tokenized_text
 
 # Build and train Doc2Vec model
-model = Doc2Vec(vector_size=500, min_count=2, epochs=10)
+model = Doc2Vec(vector_size=300, min_count=2, epochs=20)
 model.build_vocab(train_tagged)
 
 # COMMAND ----------
@@ -122,7 +137,7 @@ train_tagged = [TaggedDocument(words=row['tokenized_text'], tags=[row['DE4A Manu
 test_untagged = test_df.tokenized_text
 
 # Build and train Doc2Vec model
-model = Doc2Vec(vector_size=100, min_count=2, epochs=10)
+model = Doc2Vec(vector_size=300, min_count=2, epochs=20)
 model.build_vocab(train_tagged)
 
 model.train(train_tagged, total_examples=model.corpus_count, epochs=model.epochs)
@@ -158,4 +173,4 @@ print("Test Balanced Accuracy: {:.2f}".format(test_balanced_accuracy),
 
 # MAGIC %md
 # MAGIC ## Summary
-# MAGIC Doc2Vec model 1 has balanced accuracy ~80% while model 2 ~76% with very low sensitivity. Note that both models are not well tuned so there might be potential for improvements.
+# MAGIC Doc2Vec model 1 has balanced accuracy ~76% while model 2 ~74% with very low sensitivity. Note that both models are not well tuned so there might be potential for improvements.
